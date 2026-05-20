@@ -9,7 +9,7 @@
 //   top    俯視圖 — 沿 -y 觀察，看到 (x, z) 平面（畫面左右=x，畫面上下=z；z 越大越靠近觀察者，畫在下方）
 //   side   側視圖（右側）— 沿 -x 觀察，看到 (z, y) 平面（畫面左右=z，z 越大越靠左；畫面上下=y）
 
-export const GRID_SIZE = 4;
+export const GRID_SIZE = 3;
 
 export type Voxels = Set<string>;
 

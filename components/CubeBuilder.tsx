@@ -143,8 +143,8 @@ export default function CubeBuilder({
       <OrbitControls
         target={[GRID_SIZE / 2, GRID_SIZE / 2 - 0.5, GRID_SIZE / 2]}
         enablePan={false}
-        minDistance={4}
-        maxDistance={20}
+        minDistance={GRID_SIZE}
+        maxDistance={GRID_SIZE * 5}
       />
       <gridHelper
         args={[GRID_SIZE, GRID_SIZE, "#94a3b8", "#cbd5e1"]}

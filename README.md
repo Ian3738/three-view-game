@@ -30,5 +30,5 @@ npm run dev
 ## 已知限制
 
 - 雙人對戰用 polling（1.5s），非真正即時。要升級可換 Pusher / Supabase Realtime / SSE。
-- 4×4×4 網格上限為 64 個方塊。
+- 3×3×3 網格上限為 27 個方塊。
 - 行動裝置觸控未特別調校。
