@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import ViewGrid from "@/components/ViewGrid";
-import ShadowCard from "@/components/ShadowCard";
 import {
   projectAll,
   viewsEqual,
@@ -99,16 +98,24 @@ export default function SoloGame({ levelName, hint, minCubes, targetViews }: Pro
         <div>
           <h2 className="font-semibold text-slate-900">目標三視圖</h2>
           <p className="text-xs text-slate-500 mt-1">
-            三個面（後牆、地板、左牆）上的黑色方塊 = 投影後的陰影位置。
-            拼出能投出這些影子的立體即可。可拖曳旋轉觀察。
+            黑色 = 此格至少有一個方塊。請拼出符合三張視圖的立體。
           </p>
         </div>
 
-        <ShadowCard
-          views={targetViews}
-          highlightBad={result.kind === "bad" ? result.mismatches : []}
-          heightPx={300}
-        />
+        <div className="flex flex-wrap gap-3 lg:flex-col">
+          {(["front", "top", "side"] as const).map((name) => {
+            const bad =
+              result.kind === "bad" && result.mismatches.includes(name);
+            return (
+              <ViewGrid
+                key={name}
+                name={name}
+                mask={targetViews[name]}
+                highlight={bad ? "bad" : "neutral"}
+              />
+            );
+          })}
+        </div>
 
         <button
           onClick={check}
@@ -165,8 +172,6 @@ export default function SoloGame({ levelName, hint, minCubes, targetViews }: Pro
             ))}
           </div>
         </details>
-
-        {/* 保留 ViewGrid import 以後可能需要；目前只用在預覽 */}
       </aside>
     </div>
   );
