@@ -96,12 +96,13 @@ function Floor({
   bad: boolean;
 }) {
   // y=0 的地板。Cell at world (x+0.5, 0, z+0.5)。
+  // 新 projectTop 慣例：mask[row=z][col=x]，所以 z = row、x = col。
   const cells: React.ReactElement[] = [];
   for (let row = 0; row < GRID_SIZE; row++) {
     for (let col = 0; col < GRID_SIZE; col++) {
       const filled = mask[row][col];
       const x = col;
-      const z = GRID_SIZE - 1 - row;
+      const z = row;
       cells.push(
         <Cell
           key={`f-${row}-${col}`}

@@ -44,12 +44,14 @@ export function projectFront(voxels: Voxels): ViewMask {
 }
 
 export function projectTop(voxels: Voxels): ViewMask {
-  // 畫面：col = x, row = (GRID_SIZE-1) - z  (上方 = 遠離 viewer，z 小)
+  // 畫面：col = x, row = z
+  //   row 0（畫面上方） = z=0（物體後方，遠離 viewer）
+  //   row max（畫面下方） = z=max（物體前方，靠近 viewer）
+  // 對應「從正上方俯瞰」的視覺方向；與 3D 場景的地板視覺一致。
   const mask = emptyMask(GRID_SIZE, GRID_SIZE);
   for (const k of voxels) {
     const [x, , z] = parseKey(k);
-    const row = GRID_SIZE - 1 - z;
-    mask[row][x] = true;
+    mask[z][x] = true;
   }
   return mask;
 }
