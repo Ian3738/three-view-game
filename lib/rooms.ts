@@ -7,6 +7,7 @@ import {
   ViewMask,
   ViewName,
 } from "./voxel";
+import { recordBattleRound } from "./stats";
 
 // ── 房間資料結構 ─────────────────────────────────────────────────────────────
 type Slot = "A" | "B";
@@ -214,9 +215,9 @@ export async function submitAnswer(
   const myViews = projectAll(myVoxels);
   const { ok, mismatches } = viewsEqual(myViews, room.secret.views);
 
-  const setter: Slot = solver === "B" ? "A" : "B";
+  const setterSlot: Slot = solver === "B" ? "A" : "B";
   room.results.push({
-    setter,
+    setter: setterSlot,
     solver,
     cubesUsed: voxelsArr.length,
     correct: ok,
@@ -232,6 +233,18 @@ export async function submitAnswer(
     room.phase = "done";
   }
   await store.save(room);
+
+  // 記錄學生統計（失敗不影響對戰流程，只記到 server log）
+  const solverId = room.players[solver];
+  const setterId = room.players[setterSlot];
+  if (solverId && setterId) {
+    try {
+      await recordBattleRound({ solverId, setterId, correct: ok });
+    } catch (e) {
+      console.error("[stats] recordBattleRound failed:", e);
+    }
+  }
+
   return { ok: true, room };
 }
 

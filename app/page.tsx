@@ -43,7 +43,16 @@ export default function Home() {
           </Link>
         </div>
 
-        <p className="mt-12 text-xs text-slate-400">
+        <div className="mt-10">
+          <Link
+            href="/leaderboard"
+            className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-2 text-sm text-slate-700 hover:border-amber-500 hover:text-amber-700"
+          >
+            🏆 看對戰排行榜
+          </Link>
+        </div>
+
+        <p className="mt-8 text-xs text-slate-400">
           建議使用桌面瀏覽器，支援滑鼠拖曳旋轉立體圖。
         </p>
       </div>

@@ -2,9 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { getOrCreatePlayerId } from "@/lib/playerId";
+import IdentityGate from "@/components/IdentityGate";
 
-export default function BattleLobby() {
+export default function BattleLobbyWrapper() {
+  return <IdentityGate>{(studentId) => <Lobby studentId={studentId} />}</IdentityGate>;
+}
+
+function Lobby({ studentId }: { studentId: string }) {
   const router = useRouter();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState<"create" | "join" | null>(null);
@@ -14,11 +18,10 @@ export default function BattleLobby() {
     setBusy("create");
     setError(null);
     try {
-      const playerId = getOrCreatePlayerId();
       const r = await fetch("/api/rooms", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ playerId }),
+        body: JSON.stringify({ playerId: studentId }),
       });
       if (!r.ok) throw new Error("建房間失敗");
       const data = await r.json();

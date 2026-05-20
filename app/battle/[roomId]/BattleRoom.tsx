@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import ViewGrid from "@/components/ViewGrid";
 import { Voxels, ViewMask, ViewName } from "@/lib/voxel";
 import type { BuilderMode } from "@/components/CubeBuilder";
-import { getOrCreatePlayerId } from "@/lib/playerId";
+import IdentityGate from "@/components/IdentityGate";
 
 const CubeBuilder = dynamic(() => import("@/components/CubeBuilder"), {
   ssr: false,
@@ -43,8 +43,22 @@ type RoomData = {
   results: RoundResult[];
 };
 
-export default function BattleRoom({ roomId }: { roomId: string }) {
-  const playerIdRef = useRef<string>("");
+export default function BattleRoomWrapper({ roomId }: { roomId: string }) {
+  return (
+    <IdentityGate>
+      {(studentId) => <BattleRoom roomId={roomId} studentId={studentId} />}
+    </IdentityGate>
+  );
+}
+
+function BattleRoom({
+  roomId,
+  studentId,
+}: {
+  roomId: string;
+  studentId: string;
+}) {
+  const playerIdRef = useRef<string>(studentId);
   const [room, setRoom] = useState<RoomData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [voxels, setVoxels] = useState<Voxels>(new Set());
@@ -52,9 +66,9 @@ export default function BattleRoom({ roomId }: { roomId: string }) {
   const [submitting, setSubmitting] = useState(false);
   const lastPhaseRef = useRef<Phase | null>(null);
 
-  // 初始化 playerId、嘗試加入、開始 polling
+  // 嘗試加入、開始 polling
   useEffect(() => {
-    playerIdRef.current = getOrCreatePlayerId();
+    playerIdRef.current = studentId;
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -97,7 +111,7 @@ export default function BattleRoom({ roomId }: { roomId: string }) {
       alive = false;
       if (timer) clearTimeout(timer);
     };
-  }, [roomId]);
+  }, [roomId, studentId]);
 
   // 每次階段切換時清空本地建造中的方塊
   useEffect(() => {
