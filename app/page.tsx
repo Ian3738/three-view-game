@@ -35,7 +35,7 @@ export default function Home() {
             <div className="text-5xl mb-3">⚔️</div>
             <h2 className="text-2xl font-semibold text-slate-900">雙人對戰</h2>
             <p className="mt-2 text-sm text-slate-600">
-              出題互打：你建一個秘密形狀，對手只看三視圖還原。
+              同步對戰：兩人同時出題、同時解對方的題。看誰快、看誰準。
             </p>
             <div className="mt-4 inline-flex items-center text-rose-600 font-medium group-hover:translate-x-1 transition">
               建房間 →

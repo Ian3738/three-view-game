@@ -9,19 +9,27 @@ import {
 } from "./voxel";
 import { recordBattleRound } from "./stats";
 
-// ── 房間資料結構 ─────────────────────────────────────────────────────────────
+// ── 房間資料結構（同步對戰版） ─────────────────────────────────────────────
+//   waiting  → 已建房，等 B 加入
+//   setting  → 雙方同時出題（A 和 B 各蓋自己的秘密形狀）
+//   solving  → 雙方同時解對方的題目
+//   done     → 比賽結束，公布雙方結果與秘密形狀
+
 type Slot = "A" | "B";
-type Phase =
-  | "waiting"
-  | "setting1"
-  | "solving1"
-  | "setting2"
-  | "solving2"
-  | "done";
+type Phase = "waiting" | "setting" | "solving" | "done";
+
+type Secret = {
+  voxels: [number, number, number][];
+  views: Record<ViewName, ViewMask>;
+};
+
+type Answer = {
+  voxels: [number, number, number][];
+};
 
 type RoundResult = {
-  setter: Slot;
   solver: Slot;
+  setter: Slot;
   cubesUsed: number;
   correct: boolean;
   mismatches: ViewName[];
@@ -32,17 +40,12 @@ export type Room = {
   createdAt: number;
   players: { A: string | null; B: string | null };
   phase: Phase;
-  secret: {
-    voxels: [number, number, number][];
-    views: Record<ViewName, ViewMask>;
-  } | null;
-  answer: { voxels: [number, number, number][] } | null;
-  results: RoundResult[];
+  secrets: { A: Secret | null; B: Secret | null };
+  answers: { A: Answer | null; B: Answer | null };
+  results: { A: RoundResult | null; B: RoundResult | null };
 };
 
 // ── Store 抽象 ──────────────────────────────────────────────────────────────
-// 本機 dev：MemoryStore（process 內 Map）
-// 部署到 serverless（Vercel）：RedisStore（Upstash REST API）
 interface Store {
   get(id: string): Promise<Room | null>;
   save(room: Room): Promise<void>;
@@ -52,7 +55,6 @@ interface Store {
 class MemoryStore implements Store {
   private map: Map<string, Room>;
   constructor() {
-    // HMR 期間多次 import 仍只用同一份
     const g = globalThis as unknown as { __memRooms?: Map<string, Room> };
     if (!g.__memRooms) g.__memRooms = new Map();
     this.map = g.__memRooms;
@@ -70,12 +72,12 @@ class MemoryStore implements Store {
 
 class RedisStore implements Store {
   private redis: Redis;
-  private ttlSeconds = 60 * 60 * 24; // 24 小時自動過期，避免房間無限累積
+  private ttlSeconds = 60 * 60 * 24; // 24 小時自動過期
   constructor(redis: Redis) {
     this.redis = redis;
   }
   private k(id: string) {
-    return `tvg:room:${id}`;
+    return `tvg:room:v2:${id}`; // v2 命名避開舊版資料
   }
   async get(id: string): Promise<Room | null> {
     const r = await this.redis.get<Room>(this.k(id));
@@ -90,7 +92,6 @@ class RedisStore implements Store {
 }
 
 function buildStore(): Store {
-  // 同時接受 Upstash 原生命名與 Vercel KV/Marketplace 的命名
   const url =
     process.env.UPSTASH_REDIS_REST_URL ||
     process.env.KV_REST_API_URL ||
@@ -119,6 +120,8 @@ function makeRoomId(): string {
   return id;
 }
 
+const opposite = (s: Slot): Slot => (s === "A" ? "B" : "A");
+
 // ── 對外 API ─────────────────────────────────────────────────────────────────
 export async function createRoom(playerId: string): Promise<Room> {
   let id = makeRoomId();
@@ -128,9 +131,9 @@ export async function createRoom(playerId: string): Promise<Room> {
     createdAt: Date.now(),
     players: { A: playerId, B: null },
     phase: "waiting",
-    secret: null,
-    answer: null,
-    results: [],
+    secrets: { A: null, B: null },
+    answers: { A: null, B: null },
+    results: { A: null, B: null },
   };
   await store.save(room);
   return room;
@@ -149,7 +152,7 @@ export async function joinRoom(
   if (room.players.A === playerId || room.players.B === playerId) return room;
   if (!room.players.B) {
     room.players.B = playerId;
-    room.phase = "setting1";
+    room.phase = "setting"; // 雙方就位 → 進入同步出題
     await store.save(room);
     return room;
   }
@@ -162,18 +165,6 @@ export function slotOf(room: Room, playerId: string): Slot | null {
   return null;
 }
 
-function currentSetter(phase: Phase): Slot | null {
-  if (phase === "setting1") return "A";
-  if (phase === "setting2") return "B";
-  return null;
-}
-
-function currentSolver(phase: Phase): Slot | null {
-  if (phase === "solving1") return "B";
-  if (phase === "solving2") return "A";
-  return null;
-}
-
 export async function submitSecret(
   roomId: string,
   playerId: string,
@@ -183,16 +174,22 @@ export async function submitSecret(
   if (!room) return { ok: false, error: "房間不存在" };
   const slot = slotOf(room, playerId);
   if (!slot) return { ok: false, error: "你不在這個房間裡" };
-  const setter = currentSetter(room.phase);
-  if (!setter || setter !== slot)
-    return { ok: false, error: "現在不是你出題" };
+  if (room.phase !== "setting")
+    return { ok: false, error: "現在不是出題階段" };
+  if (room.secrets[slot])
+    return { ok: false, error: "你已經出過題了，等對手就好" };
   if (voxelsArr.length === 0)
     return { ok: false, error: "至少要放一個方塊" };
+
   const voxels: Voxels = voxelsFromArray(voxelsArr);
   const views = projectAll(voxels);
-  room.secret = { voxels: voxelsArr, views };
-  room.answer = null;
-  room.phase = room.phase === "setting1" ? "solving1" : "solving2";
+  room.secrets[slot] = { voxels: voxelsArr, views };
+
+  // 雙方都出題 → 進入解題階段
+  if (room.secrets.A && room.secrets.B) {
+    room.phase = "solving";
+  }
+
   await store.save(room);
   return { ok: true, room };
 }
@@ -206,37 +203,39 @@ export async function submitAnswer(
   if (!room) return { ok: false, error: "房間不存在" };
   const slot = slotOf(room, playerId);
   if (!slot) return { ok: false, error: "你不在這個房間裡" };
-  const solver = currentSolver(room.phase);
-  if (!solver || solver !== slot)
-    return { ok: false, error: "現在不是你解題" };
-  if (!room.secret) return { ok: false, error: "還沒有題目" };
+  if (room.phase !== "solving")
+    return { ok: false, error: "現在不是解題階段" };
+  if (room.answers[slot])
+    return { ok: false, error: "你已經送出答案了" };
+
+  const oppSlot = opposite(slot);
+  const oppSecret = room.secrets[oppSlot];
+  if (!oppSecret)
+    return { ok: false, error: "對手還沒出題" };
 
   const myVoxels = voxelsFromArray(voxelsArr);
   const myViews = projectAll(myVoxels);
-  const { ok, mismatches } = viewsEqual(myViews, room.secret.views);
+  const { ok, mismatches } = viewsEqual(myViews, oppSecret.views);
 
-  const setterSlot: Slot = solver === "B" ? "A" : "B";
-  room.results.push({
-    setter: setterSlot,
-    solver,
+  room.answers[slot] = { voxels: voxelsArr };
+  room.results[slot] = {
+    solver: slot,
+    setter: oppSlot,
     cubesUsed: voxelsArr.length,
     correct: ok,
     mismatches,
-  });
-  room.answer = { voxels: voxelsArr };
+  };
 
-  if (room.phase === "solving1") {
-    room.phase = "setting2";
-    room.secret = null;
-    room.answer = null;
-  } else {
+  // 雙方都解完 → 結束
+  if (room.answers.A && room.answers.B) {
     room.phase = "done";
   }
+
   await store.save(room);
 
-  // 記錄學生統計（失敗不影響對戰流程，只記到 server log）
-  const solverId = room.players[solver];
-  const setterId = room.players[setterSlot];
+  // 記錄學生統計（失敗不影響流程）
+  const solverId = room.players[slot];
+  const setterId = room.players[oppSlot];
   if (solverId && setterId) {
     try {
       await recordBattleRound({ solverId, setterId, correct: ok });
@@ -248,6 +247,7 @@ export async function submitAnswer(
   return { ok: true, room };
 }
 
+// 對外回傳：根據觀看者身分過濾敏感資料（不讓 A 在 setting/solving 階段看到 B 的秘密）
 export function publicView(
   room: Room,
   viewerSlot: Slot | null
@@ -256,25 +256,56 @@ export function publicView(
   phase: Phase;
   players: { A: boolean; B: boolean };
   yourSlot: Slot | null;
-  views: Record<ViewName, ViewMask> | null;
-  secretVoxels: [number, number, number][] | null;
-  lastAnswer: [number, number, number][] | null;
-  results: RoundResult[];
+  mySubmittedSecret: boolean;
+  opponentSubmittedSecret: boolean;
+  mySubmittedAnswer: boolean;
+  opponentSubmittedAnswer: boolean;
+  // 解題階段，給對手秘密的視圖（不給 voxels）
+  opponentSecretViews: Record<ViewName, ViewMask> | null;
+  // 結束後公布雙方秘密（給雙方都看）
+  reveal: {
+    A: { voxels: [number, number, number][] } | null;
+    B: { voxels: [number, number, number][] } | null;
+  };
+  results: { A: RoundResult | null; B: RoundResult | null };
 } {
-  const setter = currentSetter(room.phase);
-  const showViewsToSolver =
-    room.phase === "solving1" || room.phase === "solving2";
-  const views = showViewsToSolver && room.secret ? room.secret.views : null;
-  const isSetter = setter !== null && viewerSlot === setter;
+  const oppSlot: Slot | null =
+    viewerSlot === "A" ? "B" : viewerSlot === "B" ? "A" : null;
+
+  const mySubmittedSecret =
+    !!(viewerSlot && room.secrets[viewerSlot]);
+  const opponentSubmittedSecret =
+    !!(oppSlot && room.secrets[oppSlot]);
+  const mySubmittedAnswer =
+    !!(viewerSlot && room.answers[viewerSlot]);
+  const opponentSubmittedAnswer =
+    !!(oppSlot && room.answers[oppSlot]);
+
+  let opponentSecretViews: Record<ViewName, ViewMask> | null = null;
+  if (room.phase === "solving" && oppSlot && room.secrets[oppSlot]) {
+    opponentSecretViews = room.secrets[oppSlot]!.views;
+  }
+
+  const reveal: {
+    A: { voxels: [number, number, number][] } | null;
+    B: { voxels: [number, number, number][] } | null;
+  } = { A: null, B: null };
+  if (room.phase === "done") {
+    if (room.secrets.A) reveal.A = { voxels: room.secrets.A.voxels };
+    if (room.secrets.B) reveal.B = { voxels: room.secrets.B.voxels };
+  }
+
   return {
     id: room.id,
     phase: room.phase,
     players: { A: !!room.players.A, B: !!room.players.B },
     yourSlot: viewerSlot,
-    views,
-    secretVoxels: isSetter && room.secret ? room.secret.voxels : null,
-    lastAnswer:
-      room.phase === "done" && room.answer ? room.answer.voxels : null,
+    mySubmittedSecret,
+    opponentSubmittedSecret,
+    mySubmittedAnswer,
+    opponentSubmittedAnswer,
+    opponentSecretViews,
+    reveal,
     results: room.results,
   };
 }

@@ -15,17 +15,11 @@ const CubeBuilder = dynamic(() => import("@/components/CubeBuilder"), {
   ),
 });
 
-type Phase =
-  | "waiting"
-  | "setting1"
-  | "solving1"
-  | "setting2"
-  | "solving2"
-  | "done";
+type Phase = "waiting" | "setting" | "solving" | "done";
 
 type RoundResult = {
-  setter: "A" | "B";
   solver: "A" | "B";
+  setter: "A" | "B";
   cubesUsed: number;
   correct: boolean;
   mismatches: ViewName[];
@@ -36,10 +30,16 @@ type RoomData = {
   phase: Phase;
   players: { A: boolean; B: boolean };
   yourSlot: "A" | "B" | null;
-  views: Record<ViewName, ViewMask> | null;
-  secretVoxels: [number, number, number][] | null;
-  lastAnswer: [number, number, number][] | null;
-  results: RoundResult[];
+  mySubmittedSecret: boolean;
+  opponentSubmittedSecret: boolean;
+  mySubmittedAnswer: boolean;
+  opponentSubmittedAnswer: boolean;
+  opponentSecretViews: Record<ViewName, ViewMask> | null;
+  reveal: {
+    A: { voxels: [number, number, number][] } | null;
+    B: { voxels: [number, number, number][] } | null;
+  };
+  results: { A: RoundResult | null; B: RoundResult | null };
 };
 
 export default function BattleRoomWrapper({ roomId }: { roomId: string }) {
@@ -64,7 +64,7 @@ function BattleRoom({
   const [submitting, setSubmitting] = useState(false);
   const lastPhaseRef = useRef<Phase | null>(null);
 
-  // 嘗試加入、開始 polling
+  // polling + 自動加入
   useEffect(() => {
     playerIdRef.current = studentId;
     let alive = true;
@@ -81,7 +81,6 @@ function BattleRoom({
           throw new Error(data.error || `房間查無資料 (${r.status})`);
         }
         const data: RoomData = await r.json();
-        // 如果我還沒被認到任何 slot，且還有空位，嘗試加入
         if (alive && data.yourSlot === null && !data.players.B) {
           const j = await fetch(`/api/rooms/${roomId}`, {
             method: "POST",
@@ -111,7 +110,7 @@ function BattleRoom({
     };
   }, [roomId, studentId]);
 
-  // 每次階段切換時清空本地建造中的方塊
+  // 階段切換時清空本地建造中的方塊
   useEffect(() => {
     if (!room) return;
     if (lastPhaseRef.current !== room.phase) {
@@ -120,16 +119,6 @@ function BattleRoom({
       setError(null);
     }
   }, [room]);
-
-  const me = room?.yourSlot ?? null;
-  const phase = room?.phase ?? "waiting";
-
-  const isSetter =
-    (phase === "setting1" && me === "A") ||
-    (phase === "setting2" && me === "B");
-  const isSolver =
-    (phase === "solving1" && me === "B") ||
-    (phase === "solving2" && me === "A");
 
   const submit = useCallback(
     async (action: "submit_secret" | "submit_answer") => {
@@ -152,6 +141,8 @@ function BattleRoom({
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || "送出失敗");
         setRoom(data);
+        // 送出後清空 builder，避免 solving 階段還看到 setting 時建的東西
+        setVoxels(new Set());
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -177,57 +168,90 @@ function BattleRoom({
 
   return (
     <div className="mt-4">
-      <Header room={room} me={me} />
+      <Header room={room} />
       {error && (
         <div className="mt-3 rounded-lg bg-rose-50 border border-rose-200 p-3 text-sm text-rose-800">
           {error}
         </div>
       )}
       <div className="mt-6">
-        {phase === "waiting" && <WaitingView roomId={room.id} me={me} />}
+        {room.phase === "waiting" && (
+          <WaitingView roomId={room.id} amHost={room.yourSlot === "A"} />
+        )}
 
-        {(phase === "setting1" || phase === "setting2") &&
-          (isSetter ? (
+        {room.phase === "setting" &&
+          (room.mySubmittedSecret ? (
+            <WaitingForOther
+              label="✓ 你已出題！等對手出題中…"
+              detail={
+                room.opponentSubmittedSecret
+                  ? "對手也出完了，準備進入解題…"
+                  : "對手還在蓋自己的秘密形狀"
+              }
+            />
+          ) : (
             <SetterView
               voxels={voxels}
               setVoxels={setVoxels}
+              opponentReady={room.opponentSubmittedSecret}
               onSubmit={() => submit("submit_secret")}
               submitting={submitting}
             />
-          ) : (
-            <WaitingForOther label="等對手出題中…" />
           ))}
 
-        {(phase === "solving1" || phase === "solving2") &&
-          (isSolver && room.views ? (
+        {room.phase === "solving" &&
+          (room.mySubmittedAnswer ? (
+            <WaitingForOther
+              label="✓ 你已送出答案！等對手解題中…"
+              detail={
+                room.opponentSubmittedAnswer
+                  ? "對手也解完了，準備公布結果…"
+                  : "對手還在解你出的題"
+              }
+            />
+          ) : room.opponentSecretViews ? (
             <SolverView
-              targetViews={room.views}
+              targetViews={room.opponentSecretViews}
               voxels={voxels}
               setVoxels={setVoxels}
+              opponentDone={room.opponentSubmittedAnswer}
               onSubmit={() => submit("submit_answer")}
               submitting={submitting}
             />
           ) : (
-            <WaitingForOther label="等對手解題中…" />
+            <WaitingForOther label="載入對手題目中…" />
           ))}
 
-        {phase === "done" && <DoneView room={room} me={me} />}
+        {room.phase === "done" && <DoneView room={room} />}
       </div>
     </div>
   );
 }
 
-function Header({ room, me }: { room: RoomData; me: "A" | "B" | null }) {
+function Header({ room }: { room: RoomData }) {
   const phaseLabel: Record<Phase, string> = {
     waiting: "等待對手加入",
-    setting1: "第 1 輪 · A 出題",
-    solving1: "第 1 輪 · B 解題",
-    setting2: "第 2 輪 · B 出題",
-    solving2: "第 2 輪 · A 解題",
+    setting: "雙方同時出題",
+    solving: "雙方同時解題",
     done: "對戰結束",
   };
+  const meLabel = room.yourSlot
+    ? `${room.yourSlot}${room.yourSlot === "A" ? "（紅方）" : "（藍方）"}`
+    : "觀戰";
+
+  // 雙方狀態（出題/解題階段才顯示）
+  let aStatus = "";
+  let bStatus = "";
+  if (room.phase === "setting") {
+    aStatus = (room.yourSlot === "A" ? room.mySubmittedSecret : room.opponentSubmittedSecret) ? "✓" : "⏳";
+    bStatus = (room.yourSlot === "B" ? room.mySubmittedSecret : room.opponentSubmittedSecret) ? "✓" : "⏳";
+  } else if (room.phase === "solving") {
+    aStatus = (room.yourSlot === "A" ? room.mySubmittedAnswer : room.opponentSubmittedAnswer) ? "✓" : "⏳";
+    bStatus = (room.yourSlot === "B" ? room.mySubmittedAnswer : room.opponentSubmittedAnswer) ? "✓" : "⏳";
+  }
+
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex items-start justify-between gap-4 flex-wrap">
       <div>
         <div className="text-xs text-slate-500">房間代碼</div>
         <div className="text-2xl font-mono font-bold tracking-widest">
@@ -237,12 +261,17 @@ function Header({ room, me }: { room: RoomData; me: "A" | "B" | null }) {
       <div className="text-right">
         <div className="text-xs text-slate-500">階段</div>
         <div className="font-semibold">{phaseLabel[room.phase]}</div>
-        <div className="text-xs text-slate-500 mt-1">
-          你是：
-          <span className="font-semibold">
-            {me ?? "觀戰"} {me === "A" ? "（紅方）" : me === "B" ? "（藍方）" : ""}
-          </span>
-        </div>
+        {(room.phase === "setting" || room.phase === "solving") && (
+          <div className="mt-1 flex items-center gap-3 justify-end text-sm">
+            <span>
+              <span className="text-rose-600 font-semibold">A</span> {aStatus}
+            </span>
+            <span>
+              <span className="text-blue-600 font-semibold">B</span> {bStatus}
+            </span>
+          </div>
+        )}
+        <div className="text-xs text-slate-500 mt-1">你是：{meLabel}</div>
       </div>
     </div>
   );
@@ -250,21 +279,23 @@ function Header({ room, me }: { room: RoomData; me: "A" | "B" | null }) {
 
 function WaitingView({
   roomId,
-  me,
+  amHost,
 }: {
   roomId: string;
-  me: "A" | "B" | null;
+  amHost: boolean;
 }) {
   return (
     <div className="rounded-xl border-2 border-dashed border-slate-300 bg-white p-10 text-center">
       <div className="text-5xl mb-3">👥</div>
-      {me === "A" ? (
+      {amHost ? (
         <>
           <p className="text-lg font-semibold">把這個代碼傳給對手：</p>
           <div className="mt-4 inline-block rounded-lg bg-slate-900 px-6 py-3 text-3xl font-mono tracking-widest text-white">
             {roomId}
           </div>
-          <p className="mt-4 text-sm text-slate-500">他加入後遊戲會自動開始。</p>
+          <p className="mt-4 text-sm text-slate-500">
+            他加入後雙方就會同時開始出題。
+          </p>
         </>
       ) : (
         <p className="text-slate-600">嘗試加入中…</p>
@@ -273,11 +304,18 @@ function WaitingView({
   );
 }
 
-function WaitingForOther({ label }: { label: string }) {
+function WaitingForOther({
+  label,
+  detail,
+}: {
+  label: string;
+  detail?: string;
+}) {
   return (
     <div className="rounded-xl border-2 border-dashed border-slate-300 bg-white p-10 text-center">
       <div className="text-5xl mb-3">⏳</div>
-      <p className="text-slate-600">{label}</p>
+      <p className="text-slate-700 font-semibold">{label}</p>
+      {detail && <p className="mt-2 text-sm text-slate-500">{detail}</p>}
     </div>
   );
 }
@@ -285,19 +323,23 @@ function WaitingForOther({ label }: { label: string }) {
 function SetterView({
   voxels,
   setVoxels,
+  opponentReady,
   onSubmit,
   submitting,
 }: {
   voxels: Voxels;
   setVoxels: (v: Voxels) => void;
+  opponentReady: boolean;
   onSubmit: () => void;
   submitting: boolean;
 }) {
   return (
     <div>
       <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900">
-        🤫 偷偷蓋一個立體圖。對手只會看到你的三視圖，不會看到立體本身。建議
-        3-6 個方塊，太簡單沒挑戰、太難對手猜不到。
+        🤫 同時開蓋！偷偷蓋一個立體圖。對手只會看到你的三視圖。
+        {opponentReady && (
+          <span className="ml-1 font-semibold">對手已經出完了，快點！</span>
+        )}
       </div>
       <div className="mt-3 flex items-center gap-2">
         <div className="text-sm text-slate-600">
@@ -321,7 +363,7 @@ function SetterView({
         disabled={submitting || voxels.size === 0}
         className="mt-4 w-full rounded-lg bg-rose-600 px-4 py-3 text-white font-semibold disabled:bg-slate-300 hover:bg-rose-700"
       >
-        {submitting ? "送出中…" : "送出題目，換對手解"}
+        {submitting ? "送出中…" : "送出題目"}
       </button>
     </div>
   );
@@ -331,12 +373,14 @@ function SolverView({
   targetViews,
   voxels,
   setVoxels,
+  opponentDone,
   onSubmit,
   submitting,
 }: {
   targetViews: Record<ViewName, ViewMask>;
   voxels: Voxels;
   setVoxels: (v: Voxels) => void;
+  opponentDone: boolean;
   onSubmit: () => void;
   submitting: boolean;
 }) {
@@ -344,7 +388,10 @@ function SolverView({
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
       <div>
         <div className="rounded-lg bg-sky-50 border border-sky-200 p-3 text-sm text-sky-900">
-          🔍 對手已出題，看下面（或右邊）的三視圖把立體還原。確定後按「送出答案」。
+          🔍 看下方（或右邊）的三視圖把對手出的立體還原。
+          {opponentDone && (
+            <span className="ml-1 font-semibold">對手已經解完了，加油！</span>
+          )}
         </div>
         <div className="mt-3 flex items-center gap-2">
           <div className="text-sm text-slate-600">
@@ -383,59 +430,108 @@ function SolverView({
   );
 }
 
-function DoneView({ room, me }: { room: RoomData; me: "A" | "B" | null }) {
+function DoneView({ room }: { room: RoomData }) {
   const score = useMemo(() => {
     let a = 0;
     let b = 0;
-    for (const r of room.results) {
-      if (!r.correct) continue;
-      if (r.solver === "A") a++;
-      else b++;
-    }
+    if (room.results.A?.correct) a++;
+    if (room.results.B?.correct) b++;
     return { a, b };
   }, [room.results]);
 
-  const winner =
-    score.a === score.b ? "平手" : score.a > score.b ? "A 獲勝 🏆" : "B 獲勝 🏆";
+  const winnerLabel =
+    score.a === score.b
+      ? score.a === 1
+        ? "雙方都答對 — 平手！"
+        : score.a === 0
+          ? "雙方都答錯 — 平手"
+          : "平手"
+      : score.a > score.b
+        ? "A 獲勝 🏆"
+        : "B 獲勝 🏆";
 
   return (
-    <div className="rounded-xl border-2 border-slate-200 bg-white p-6">
-      <h2 className="text-xl font-bold">對戰結束</h2>
-      <div className="mt-2 text-lg">
-        比分 — A: <span className="font-mono font-bold">{score.a}</span> · B:{" "}
-        <span className="font-mono font-bold">{score.b}</span>
+    <div className="space-y-4">
+      <div className="rounded-xl border-2 border-slate-200 bg-white p-6">
+        <h2 className="text-xl font-bold">對戰結束</h2>
+        <div className="mt-2 text-lg">
+          比分 — <span className="text-rose-600 font-semibold">A</span>:{" "}
+          <span className="font-mono font-bold">{score.a}</span> ·{" "}
+          <span className="text-blue-600 font-semibold">B</span>:{" "}
+          <span className="font-mono font-bold">{score.b}</span>
+        </div>
+        <div className="mt-1 text-2xl font-bold text-amber-600">
+          {winnerLabel}
+        </div>
       </div>
-      <div className="mt-1 text-2xl font-bold text-rose-600">{winner}</div>
-      <div className="mt-4 space-y-2">
-        {room.results.map((r, i) => (
-          <div key={i} className="rounded-lg border border-slate-200 p-3 text-sm">
-            <div>
-              第 {i + 1} 輪 · {r.setter} 出題 → {r.solver} 解題
-            </div>
-            <div className="mt-1">
-              {r.correct ? (
-                <span className="text-emerald-700 font-medium">
-                  ✓ 正確（用了 {r.cubesUsed} 個方塊）
-                </span>
-              ) : (
-                <span className="text-rose-700 font-medium">
-                  ✗ 不符（用了 {r.cubesUsed} 個方塊，
-                  {r.mismatches.length > 0 &&
-                    r.mismatches.map((m) =>
-                      m === "front" ? "前視圖" : m === "top" ? "上視圖" : "右視圖"
-                    ).join("、") + " 不對"}
-                  ）
-                </span>
-              )}
-            </div>
-          </div>
-        ))}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <PlayerResultCard
+          label="A 的成績"
+          color="rose"
+          result={room.results.A}
+          secret={room.reveal.A}
+        />
+        <PlayerResultCard
+          label="B 的成績"
+          color="blue"
+          result={room.results.B}
+          secret={room.reveal.B}
+        />
       </div>
-      <div className="mt-4 text-sm text-slate-500">
-        你是 {me ?? "觀戰"}。想再來一場？回大廳建新房間即可。
+
+      <div className="text-sm text-slate-500">
+        想再來一場？回大廳建新房間即可。
       </div>
     </div>
   );
 }
 
+function PlayerResultCard({
+  label,
+  color,
+  result,
+  secret,
+}: {
+  label: string;
+  color: "rose" | "blue";
+  result: RoundResult | null;
+  secret: { voxels: [number, number, number][] } | null;
+}) {
+  const headerCls =
+    color === "rose"
+      ? "text-rose-700 border-rose-200"
+      : "text-blue-700 border-blue-200";
 
+  return (
+    <div className={`rounded-xl border-2 bg-white p-4 ${headerCls}`}>
+      <div className="font-semibold">{label}</div>
+      {result ? (
+        <div className="mt-2 text-sm">
+          解題：
+          {result.correct ? (
+            <span className="text-emerald-700 font-semibold">
+              ✓ 正確（用 {result.cubesUsed} 個方塊）
+            </span>
+          ) : (
+            <span className="text-rose-700 font-semibold">
+              ✗ 不符 — {result.mismatches
+                .map((m) =>
+                  m === "front" ? "前視圖" : m === "top" ? "上視圖" : "右視圖"
+                )
+                .join("、")}{" "}
+              不對
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="mt-2 text-sm text-slate-400">未送出答案</div>
+      )}
+      {secret && (
+        <div className="mt-3 text-xs text-slate-500">
+          出題的秘密形狀：{secret.voxels.length} 個方塊
+        </div>
+      )}
+    </div>
+  );
+}

@@ -10,8 +10,8 @@ export default function BattleIndex() {
         </Link>
         <h1 className="mt-4 text-3xl font-bold">雙人對戰</h1>
         <p className="mt-2 text-slate-600">
-          玩法：A 偷偷建一個立體 → 系統算出三視圖 → B 只看視圖把它還原。
-          然後換 B 出題、A 解。各打一輪，比看誰準。
+          玩法：雙方同時各蓋一個秘密立體 → 系統算出三視圖 →
+          雙方再同時看對方的視圖把它還原。看誰快、看誰準。
         </p>
         <div className="mt-8">
           <BattleLobby />
