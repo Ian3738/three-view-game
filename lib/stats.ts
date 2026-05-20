@@ -1,20 +1,27 @@
 import { Redis } from "@upstash/redis";
 
 // 學生數據紀錄：
-//   tvg:student:{id}      → hash {classCode, seatNo, wins, losses, total, lastSeen}
-//   tvg:students          → set 所有 student id（用於後台列出全部）
-//   tvg:leaderboard:wins  → zset score=wins，member=id（取 top-N 用）
+//   tvg:student:{id}           → hash {classCode, seatNo, wins, losses, total,
+//                                       raceWins, raceLosses, raceTotal, lastSeen}
+//   tvg:students               → set 所有 student id
+//   tvg:leaderboard:wins       → zset 對戰勝場（A 出題 B 解 的那種）
+//   tvg:leaderboard:race       → zset 速度賽勝場
 //
-// 沒設 Redis 環境變數時所有操作為 no-op（單機 dev 不需要排行榜）。
+// 沒設 Redis 環境變數時所有操作為 no-op。
 
 type StudentRecord = {
   id: string;
   classCode: string;
   seatNo: number;
+  // 對戰（出題互打）
   wins: number;
   losses: number;
   total: number;
-  lastSeen: number; // epoch ms
+  // 速度賽（同題比快）
+  raceWins: number;
+  raceLosses: number;
+  raceTotal: number;
+  lastSeen: number;
 };
 
 function getRedis(): Redis | null {
@@ -35,8 +42,6 @@ const redis: Redis | null =
   g.__statsRedis === undefined ? getRedis() : g.__statsRedis;
 g.__statsRedis = redis;
 
-// 從 id 解析回 classCode + seatNo。id 格式為 "{classCode}-{padded seat}"。
-// classCode 本身可能含 "-"（雖然不鼓勵），所以從右邊找最後一個 "-"。
 function parseId(id: string): { classCode: string; seatNo: number } | null {
   const idx = id.lastIndexOf("-");
   if (idx <= 0 || idx === id.length - 1) return null;
@@ -50,11 +55,10 @@ const KEY = {
   student: (id: string) => `tvg:student:${id}`,
   studentsSet: "tvg:students",
   lbWins: "tvg:leaderboard:wins",
+  lbRace: "tvg:leaderboard:race",
 };
 
-// 對戰一輪結束時呼叫。會同時 upsert solver 與 setter 兩位學生的 lastSeen。
-// 計分規則：solver 答對 → solver 勝場 +1；答錯 → solver 負場 +1。
-// setter 不直接得分（出題只是配合）。total = wins + losses。
+// ── 對戰（出題互打）─────────────────────────────────────────────────────
 export async function recordBattleRound(params: {
   solverId: string;
   setterId: string;
@@ -68,7 +72,6 @@ export async function recordBattleRound(params: {
 
   const pipe = redis.pipeline();
 
-  // upsert solver
   pipe.hset(KEY.student(params.solverId), {
     classCode: solverParsed.classCode,
     seatNo: solverParsed.seatNo,
@@ -80,12 +83,10 @@ export async function recordBattleRound(params: {
     pipe.zincrby(KEY.lbWins, 1, params.solverId);
   } else {
     pipe.hincrby(KEY.student(params.solverId), "losses", 1);
-    // 確保 solver 一定在 leaderboard 上（即使 0 分也要看得到）
     pipe.zincrby(KEY.lbWins, 0, params.solverId);
   }
   pipe.sadd(KEY.studentsSet, params.solverId);
 
-  // upsert setter（不影響勝負，只記 lastSeen）
   if (setterParsed) {
     pipe.hset(KEY.student(params.setterId), {
       classCode: setterParsed.classCode,
@@ -99,27 +100,57 @@ export async function recordBattleRound(params: {
   await pipe.exec();
 }
 
-// 排行榜：取前 N 名（依勝場降序）。可選擇班級篩選（在記憶體做，全表 < 1000 人沒問題）。
+// ── 速度賽 ─────────────────────────────────────────────────────────────
+// 一場結束時、針對每位玩家分別呼叫。total = 你打的回合數，wins = 你贏的回合數。
+export async function recordRaceFinish(params: {
+  studentId: string;
+  wonRounds: number;
+  totalRounds: number;
+}): Promise<void> {
+  if (!redis) return;
+  const parsed = parseId(params.studentId);
+  if (!parsed) return;
+  const now = Date.now();
+  const losses = Math.max(0, params.totalRounds - params.wonRounds);
+
+  const pipe = redis.pipeline();
+  pipe.hset(KEY.student(params.studentId), {
+    classCode: parsed.classCode,
+    seatNo: parsed.seatNo,
+    lastSeen: now,
+  });
+  pipe.hincrby(KEY.student(params.studentId), "raceWins", params.wonRounds);
+  pipe.hincrby(KEY.student(params.studentId), "raceLosses", losses);
+  pipe.hincrby(KEY.student(params.studentId), "raceTotal", params.totalRounds);
+  // 排行榜分數 = 累積 raceWins
+  pipe.zincrby(KEY.lbRace, params.wonRounds, params.studentId);
+  pipe.sadd(KEY.studentsSet, params.studentId);
+  await pipe.exec();
+}
+
+// ── 讀取 ───────────────────────────────────────────────────────────────
+export type LeaderboardKind = "battle" | "race";
+
 export async function getLeaderboard(opts?: {
   limit?: number;
   classCode?: string;
+  kind?: LeaderboardKind;
 }): Promise<StudentRecord[]> {
   if (!redis) return [];
   const limit = opts?.limit ?? 50;
   const classFilter = opts?.classCode?.trim();
+  const kind = opts?.kind ?? "battle";
+  const zkey = kind === "race" ? KEY.lbRace : KEY.lbWins;
 
-  // 先全部撈出來，再過濾。Upstash zrange 支援 REV + WITHSCORES。
-  // 如果未來資料量大可改 zscan + 分頁。
-  const all = (await redis.zrange<string[]>(KEY.lbWins, 0, -1, {
+  const all = (await redis.zrange<string[]>(zkey, 0, -1, {
     rev: true,
     withScores: true,
   })) as Array<string | number>;
-  // 形如 [id1, score1, id2, score2, ...]
-  const pairs: Array<{ id: string; wins: number }> = [];
+  const pairs: Array<{ id: string; score: number }> = [];
   for (let i = 0; i < all.length; i += 2) {
     pairs.push({
       id: String(all[i]),
-      wins: Number(all[i + 1]) || 0,
+      score: Number(all[i + 1]) || 0,
     });
   }
 
@@ -146,6 +177,9 @@ export async function getStudentDetail(id: string): Promise<StudentRecord | null
     wins: Number(h.wins) || 0,
     losses: Number(h.losses) || 0,
     total: Number(h.total) || 0,
+    raceWins: Number(h.raceWins) || 0,
+    raceLosses: Number(h.raceLosses) || 0,
+    raceTotal: Number(h.raceTotal) || 0,
     lastSeen: Number(h.lastSeen) || 0,
   };
 }
