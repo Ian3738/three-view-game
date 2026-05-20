@@ -85,7 +85,47 @@ function VoxelMesh({
   );
 }
 
-function GhostMesh({
+// 地板層的鬼影格：平面磚（不是立方體），看起來像九宮格地磚
+function FloorGhost({
+  k,
+  pos,
+  onAdd,
+}: {
+  k: string;
+  pos: [number, number, number];
+  onAdd: (k: string) => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <mesh
+      position={[pos[0], 0.015, pos[2]]}
+      rotation={[-Math.PI / 2, 0, 0]}
+      onClick={(e: ThreeEvent<MouseEvent>) => {
+        e.stopPropagation();
+        onAdd(k);
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+        document.body.style.cursor = "crosshair";
+      }}
+      onPointerOut={() => {
+        setHovered(false);
+        document.body.style.cursor = "auto";
+      }}
+    >
+      <planeGeometry args={[0.92, 0.92]} />
+      <meshStandardMaterial
+        color={hovered ? "#22c55e" : "#94a3b8"}
+        transparent
+        opacity={hovered ? 0.55 : 0.22}
+      />
+    </mesh>
+  );
+}
+
+// 疊放層的鬼影格：保留 3D 立方體（線索：「這裡可以往上疊」）
+function StackGhost({
   k,
   pos,
   onAdd,
@@ -116,27 +156,20 @@ function GhostMesh({
       <meshStandardMaterial
         color={hovered ? "#22c55e" : "#cbd5e1"}
         transparent
-        opacity={hovered ? 0.55 : 0.18}
+        opacity={hovered ? 0.55 : 0.2}
       />
     </mesh>
   );
 }
 
-// 場景中固定的方向指示：前邊紅、右邊藍 + 對應文字標籤
+// 只標記「前」方向（紅色長條 + 標籤）
 function DirectionMarkers() {
   return (
     <group>
-      {/* 前邊（+z 邊）紅色長條 */}
       <mesh position={[GRID_SIZE / 2, 0.025, GRID_SIZE + 0.01]}>
         <boxGeometry args={[GRID_SIZE, 0.05, 0.08]} />
         <meshBasicMaterial color="#dc2626" />
       </mesh>
-      {/* 右邊（+x 邊）藍色長條 */}
-      <mesh position={[GRID_SIZE + 0.01, 0.025, GRID_SIZE / 2]}>
-        <boxGeometry args={[0.08, 0.05, GRID_SIZE]} />
-        <meshBasicMaterial color="#2563eb" />
-      </mesh>
-      {/* 前 標籤 */}
       <Html
         position={[GRID_SIZE / 2, 0.05, GRID_SIZE + 0.45]}
         center
@@ -145,17 +178,6 @@ function DirectionMarkers() {
       >
         <div className="rounded-md bg-rose-600 text-white font-bold px-2 py-0.5 text-sm whitespace-nowrap shadow">
           前
-        </div>
-      </Html>
-      {/* 右 標籤 */}
-      <Html
-        position={[GRID_SIZE + 0.45, 0.05, GRID_SIZE / 2]}
-        center
-        distanceFactor={GRID_SIZE * 4}
-        style={{ pointerEvents: "none", userSelect: "none" }}
-      >
-        <div className="rounded-md bg-blue-600 text-white font-bold px-2 py-0.5 text-sm whitespace-nowrap shadow">
-          右
         </div>
       </Html>
     </group>
@@ -223,9 +245,14 @@ export default function CubeBuilder({
           onRemove={remove}
         />
       ))}
-      {ghosts.map(({ k, pos }) => (
-        <GhostMesh key={k} k={k} pos={pos} onAdd={add} />
-      ))}
+      {ghosts.map(({ k, pos }) => {
+        const isFloor = pos[1] < 0.6; // y center 0.5 = 地板層
+        return isFloor ? (
+          <FloorGhost key={k} k={k} pos={pos} onAdd={add} />
+        ) : (
+          <StackGhost key={k} k={k} pos={pos} onAdd={add} />
+        );
+      })}
     </Canvas>
   );
 }
