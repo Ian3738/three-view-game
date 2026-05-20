@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import ViewGrid from "@/components/ViewGrid";
+import ShadowCard from "@/components/ShadowCard";
 import { Voxels, ViewMask, ViewName } from "@/lib/voxel";
 import IdentityGate from "@/components/IdentityGate";
 
@@ -343,10 +343,11 @@ function PlayView({
       </div>
       <aside>
         <h2 className="font-semibold">這題的三視圖</h2>
-        <div className="mt-3 flex flex-wrap gap-3 lg:flex-col">
-          {(["front", "top", "side"] as const).map((name) => (
-            <ViewGrid key={name} name={name} mask={round.views[name]} />
-          ))}
+        <p className="text-xs text-slate-500 mt-1">
+          拼出能投出這些影子的立體。可拖曳旋轉。
+        </p>
+        <div className="mt-3">
+          <ShadowCard views={round.views} heightPx={300} />
         </div>
         {round.opponentForfeited && !round.youForfeited && (
           <div className="mt-4 rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800">

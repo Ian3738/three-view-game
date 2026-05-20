@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import ViewGrid from "@/components/ViewGrid";
+import ShadowCard from "@/components/ShadowCard";
 import { Voxels, ViewMask, ViewName } from "@/lib/voxel";
 import IdentityGate from "@/components/IdentityGate";
 
@@ -420,10 +420,11 @@ function SolverView({
       </div>
       <aside>
         <h2 className="font-semibold">對手出的三視圖</h2>
-        <div className="mt-3 flex flex-wrap gap-3 lg:flex-col">
-          {(["front", "top", "side"] as const).map((name) => (
-            <ViewGrid key={name} name={name} mask={targetViews[name]} />
-          ))}
+        <p className="text-xs text-slate-500 mt-1">
+          拼出能投出這些影子的立體。可拖曳旋轉觀察。
+        </p>
+        <div className="mt-3">
+          <ShadowCard views={targetViews} heightPx={300} />
         </div>
       </aside>
     </div>

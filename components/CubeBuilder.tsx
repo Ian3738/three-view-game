@@ -51,14 +51,17 @@ function VoxelMesh({
   k,
   pos,
   color,
+  willBeRemoved,
   onRemove,
+  onHoverChange,
 }: {
   k: string;
   pos: [number, number, number];
   color: string;
+  willBeRemoved: boolean; // 滑到上面或下面的方塊時，整柱往上都標亮
   onRemove: (k: string) => void;
+  onHoverChange: (k: string | null) => void;
 }) {
-  const [hovered, setHovered] = useState(false);
   return (
     <mesh
       position={pos}
@@ -68,17 +71,17 @@ function VoxelMesh({
       }}
       onPointerOver={(e) => {
         e.stopPropagation();
-        setHovered(true);
+        onHoverChange(k);
         document.body.style.cursor = "pointer";
       }}
       onPointerOut={() => {
-        setHovered(false);
+        onHoverChange(null);
         document.body.style.cursor = "auto";
       }}
     >
       <boxGeometry args={[0.96, 0.96, 0.96]} />
       <meshStandardMaterial
-        color={hovered ? "#f97316" : color}
+        color={willBeRemoved ? "#f97316" : color}
         roughness={0.5}
       />
     </mesh>
@@ -190,6 +193,8 @@ export default function CubeBuilder({
   readonly = false,
   color = "#3b82f6",
 }: Props) {
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+
   const filled = useMemo(
     () => Array.from(voxels, (k) => ({ k, pos: posOf(k) })),
     [voxels]
@@ -199,16 +204,33 @@ export default function CubeBuilder({
     return computePlaceable(voxels).map((k) => ({ k, pos: posOf(k) }));
   }, [voxels, readonly]);
 
+  // 當 hover 在某個方塊時，預先標亮「將會被一起移除」的同柱上方所有方塊
+  const willRemoveSet = useMemo(() => {
+    if (!hoveredKey) return new Set<string>();
+    const [hx, hy, hz] = parseKey(hoveredKey);
+    const set = new Set<string>();
+    for (const k of voxels) {
+      const [x, y, z] = parseKey(k);
+      if (x === hx && z === hz && y >= hy) set.add(k);
+    }
+    return set;
+  }, [hoveredKey, voxels]);
+
   const add = (k: string) => {
     if (readonly || !onChange) return;
     const next = new Set(voxels);
     next.add(k);
     onChange(next);
   };
+  // 級聯移除：點到的方塊 + 同柱上方所有方塊一起拿掉（避免飄浮）
   const remove = (k: string) => {
     if (readonly || !onChange) return;
+    const [hx, hy, hz] = parseKey(k);
     const next = new Set(voxels);
-    next.delete(k);
+    for (const m of voxels) {
+      const [x, y, z] = parseKey(m);
+      if (x === hx && z === hz && y >= hy) next.delete(m);
+    }
     onChange(next);
   };
 
@@ -242,7 +264,9 @@ export default function CubeBuilder({
           k={k}
           pos={pos}
           color={color}
+          willBeRemoved={willRemoveSet.has(k)}
           onRemove={remove}
+          onHoverChange={setHoveredKey}
         />
       ))}
       {ghosts.map(({ k, pos }) => {
