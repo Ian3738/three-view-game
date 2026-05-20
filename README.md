@@ -1,36 +1,34 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 三視圖大挑戰
 
-## Getting Started
+國中三視圖單元的互動學習遊戲：看正視圖、俯視圖、側視圖，把立方體拼回來。
 
-First, run the development server:
+- **單人闖關**：6 個關卡，難度遞增，即時驗證並指出哪張視圖不符。
+- **雙人對戰**：A 出題（建一個秘密立體）、B 只看三視圖還原；換手再來一輪、計分。
+
+## 技術棧
+
+Next.js 16 (App Router) · React 19 · Tailwind CSS 4 · React Three Fiber / three.js · Upstash Redis（雙人對戰房間狀態）
+
+## 本機開發
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+開 <http://localhost:3000>。沒設 Redis 環境變數時會用記憶體 store（重啟會清空，僅供 dev）。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 部署（Vercel + Upstash）
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **建立 Upstash Redis 資料庫**：到 <https://console.upstash.com/redis>，建一個 Free tier 的 Redis（region 選最近的）。複製 `UPSTASH_REDIS_REST_URL` 與 `UPSTASH_REDIS_REST_TOKEN`。
+2. **連到 Vercel**：在 Vercel 開新 project import 此 repo。Build 設定維持預設。
+3. **設環境變數**：Project Settings → Environment Variables 加上前述兩個 key。
+4. **Redeploy**：觸發一次重新部署讓環境變數生效。
 
-## Learn More
+無環境變數時雙人對戰會用 in-memory store，**在 serverless 下房間狀態會在多個函式實例間遺失**，務必設好 Redis 再開放給使用者。
 
-To learn more about Next.js, take a look at the following resources:
+## 已知限制
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- 雙人對戰用 polling（1.5s），非真正即時。要升級可換 Pusher / Supabase Realtime / SSE。
+- 4×4×4 網格上限為 64 個方塊。
+- 行動裝置觸控未特別調校。
