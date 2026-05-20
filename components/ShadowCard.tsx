@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, Html } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import { GRID_SIZE, ViewMask, ViewName } from "@/lib/voxel";
 
 type Props = {
@@ -168,44 +168,6 @@ function LeftWall({
   );
 }
 
-function AxisLabels() {
-  // 每面牆角落貼個小標籤
-  return (
-    <group>
-      <Html
-        position={[GRID_SIZE / 2, GRID_SIZE + 0.3, 0]}
-        center
-        distanceFactor={GRID_SIZE * 4}
-        style={{ pointerEvents: "none", userSelect: "none" }}
-      >
-        <div className="rounded bg-slate-900 text-white text-xs px-1.5 py-0.5 font-semibold">
-          前視圖
-        </div>
-      </Html>
-      <Html
-        position={[GRID_SIZE + 0.3, 0, GRID_SIZE / 2]}
-        center
-        distanceFactor={GRID_SIZE * 4}
-        style={{ pointerEvents: "none", userSelect: "none" }}
-      >
-        <div className="rounded bg-slate-900 text-white text-xs px-1.5 py-0.5 font-semibold">
-          上視圖
-        </div>
-      </Html>
-      <Html
-        position={[0, GRID_SIZE + 0.3, GRID_SIZE / 2]}
-        center
-        distanceFactor={GRID_SIZE * 4}
-        style={{ pointerEvents: "none", userSelect: "none" }}
-      >
-        <div className="rounded bg-slate-900 text-white text-xs px-1.5 py-0.5 font-semibold">
-          右視圖
-        </div>
-      </Html>
-    </group>
-  );
-}
-
 export default function ShadowCard({
   views,
   highlightBad = [],
@@ -238,7 +200,6 @@ export default function ShadowCard({
         <BackWall mask={views.front} bad={highlightBad.includes("front")} />
         <Floor mask={views.top} bad={highlightBad.includes("top")} />
         <LeftWall mask={views.side} bad={highlightBad.includes("side")} />
-        <AxisLabels />
       </Canvas>
     </div>
   );
