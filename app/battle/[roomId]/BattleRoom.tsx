@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ViewGrid from "@/components/ViewGrid";
 import { Voxels, ViewMask, ViewName } from "@/lib/voxel";
-import type { BuilderMode } from "@/components/CubeBuilder";
 import IdentityGate from "@/components/IdentityGate";
 
 const CubeBuilder = dynamic(() => import("@/components/CubeBuilder"), {
@@ -62,7 +61,6 @@ function BattleRoom({
   const [room, setRoom] = useState<RoomData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [voxels, setVoxels] = useState<Voxels>(new Set());
-  const [mode, setMode] = useState<BuilderMode>("add");
   const [submitting, setSubmitting] = useState(false);
   const lastPhaseRef = useRef<Phase | null>(null);
 
@@ -119,7 +117,6 @@ function BattleRoom({
     if (lastPhaseRef.current !== room.phase) {
       lastPhaseRef.current = room.phase;
       setVoxels(new Set());
-      setMode("add");
       setError(null);
     }
   }, [room]);
@@ -194,8 +191,6 @@ function BattleRoom({
             <SetterView
               voxels={voxels}
               setVoxels={setVoxels}
-              mode={mode}
-              setMode={setMode}
               onSubmit={() => submit("submit_secret")}
               submitting={submitting}
             />
@@ -209,8 +204,6 @@ function BattleRoom({
               targetViews={room.views}
               voxels={voxels}
               setVoxels={setVoxels}
-              mode={mode}
-              setMode={setMode}
               onSubmit={() => submit("submit_answer")}
               submitting={submitting}
             />
@@ -292,15 +285,11 @@ function WaitingForOther({ label }: { label: string }) {
 function SetterView({
   voxels,
   setVoxels,
-  mode,
-  setMode,
   onSubmit,
   submitting,
 }: {
   voxels: Voxels;
   setVoxels: (v: Voxels) => void;
-  mode: BuilderMode;
-  setMode: (m: BuilderMode) => void;
   onSubmit: () => void;
   submitting: boolean;
 }) {
@@ -311,9 +300,7 @@ function SetterView({
         3-6 個方塊，太簡單沒挑戰、太難對手猜不到。
       </div>
       <div className="mt-3 flex items-center gap-2">
-        <ModeButton active={mode === "add"} onClick={() => setMode("add")} label="新增" color="blue" />
-        <ModeButton active={mode === "remove"} onClick={() => setMode("remove")} label="移除" color="rose" />
-        <div className="ml-4 text-sm text-slate-600">
+        <div className="text-sm text-slate-600">
           方塊：<span className="font-semibold">{voxels.size}</span>
         </div>
         <button
@@ -323,8 +310,11 @@ function SetterView({
           清空
         </button>
       </div>
-      <div className="mt-3 h-[480px] rounded-xl border-2 border-slate-200 bg-white overflow-hidden">
-        <CubeBuilder voxels={voxels} onChange={setVoxels} mode={mode} color="#dc2626" />
+      <div className="mt-3 h-[55vh] min-h-[360px] max-h-[560px] lg:h-[520px] rounded-xl border-2 border-slate-200 bg-white overflow-hidden">
+        <CubeBuilder voxels={voxels} onChange={setVoxels} color="#dc2626" />
+      </div>
+      <div className="mt-2 text-xs text-slate-500">
+        👆 點透明格放方塊，點實心方塊移除。
       </div>
       <button
         onClick={onSubmit}
@@ -341,16 +331,12 @@ function SolverView({
   targetViews,
   voxels,
   setVoxels,
-  mode,
-  setMode,
   onSubmit,
   submitting,
 }: {
   targetViews: Record<ViewName, ViewMask>;
   voxels: Voxels;
   setVoxels: (v: Voxels) => void;
-  mode: BuilderMode;
-  setMode: (m: BuilderMode) => void;
   onSubmit: () => void;
   submitting: boolean;
 }) {
@@ -358,12 +344,10 @@ function SolverView({
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
       <div>
         <div className="rounded-lg bg-sky-50 border border-sky-200 p-3 text-sm text-sky-900">
-          🔍 對手已出題，看右邊的三視圖把立體還原。確定後按「送出答案」。
+          🔍 對手已出題，看下面（或右邊）的三視圖把立體還原。確定後按「送出答案」。
         </div>
         <div className="mt-3 flex items-center gap-2">
-          <ModeButton active={mode === "add"} onClick={() => setMode("add")} label="新增" color="blue" />
-          <ModeButton active={mode === "remove"} onClick={() => setMode("remove")} label="移除" color="rose" />
-          <div className="ml-4 text-sm text-slate-600">
+          <div className="text-sm text-slate-600">
             方塊：<span className="font-semibold">{voxels.size}</span>
           </div>
           <button
@@ -373,8 +357,11 @@ function SolverView({
             清空
           </button>
         </div>
-        <div className="mt-3 h-[480px] rounded-xl border-2 border-slate-200 bg-white overflow-hidden">
-          <CubeBuilder voxels={voxels} onChange={setVoxels} mode={mode} color="#2563eb" />
+        <div className="mt-3 h-[55vh] min-h-[360px] max-h-[560px] lg:h-[520px] rounded-xl border-2 border-slate-200 bg-white overflow-hidden">
+          <CubeBuilder voxels={voxels} onChange={setVoxels} color="#2563eb" />
+        </div>
+        <div className="mt-2 text-xs text-slate-500">
+          👆 點透明格放方塊，點實心方塊移除。
         </div>
         <button
           onClick={onSubmit}
@@ -386,7 +373,7 @@ function SolverView({
       </div>
       <aside>
         <h2 className="font-semibold">對手出的三視圖</h2>
-        <div className="mt-3 flex flex-col gap-3">
+        <div className="mt-3 flex flex-wrap gap-3 lg:flex-col">
           {(["front", "top", "side"] as const).map((name) => (
             <ViewGrid key={name} name={name} mask={targetViews[name]} />
           ))}
@@ -435,7 +422,7 @@ function DoneView({ room, me }: { room: RoomData; me: "A" | "B" | null }) {
                   ✗ 不符（用了 {r.cubesUsed} 個方塊，
                   {r.mismatches.length > 0 &&
                     r.mismatches.map((m) =>
-                      m === "front" ? "正視圖" : m === "top" ? "俯視圖" : "側視圖"
+                      m === "front" ? "前視圖" : m === "top" ? "上視圖" : "右視圖"
                     ).join("、") + " 不對"}
                   ）
                 </span>
@@ -451,30 +438,4 @@ function DoneView({ room, me }: { room: RoomData; me: "A" | "B" | null }) {
   );
 }
 
-function ModeButton({
-  active,
-  onClick,
-  label,
-  color,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  color: "blue" | "rose";
-}) {
-  const activeCls =
-    color === "blue"
-      ? "bg-blue-600 text-white border-blue-600"
-      : "bg-rose-600 text-white border-rose-600";
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-md border-2 px-4 py-1.5 text-sm font-medium ${
-        active ? activeCls : "bg-white text-slate-700 border-slate-300"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
 

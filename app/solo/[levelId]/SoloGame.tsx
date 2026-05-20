@@ -10,7 +10,6 @@ import {
   ViewName,
   Voxels,
 } from "@/lib/voxel";
-import type { BuilderMode } from "@/components/CubeBuilder";
 
 const CubeBuilder = dynamic(() => import("@/components/CubeBuilder"), {
   ssr: false,
@@ -30,7 +29,6 @@ type Props = {
 
 export default function SoloGame({ levelName, hint, minCubes, targetViews }: Props) {
   const [voxels, setVoxels] = useState<Voxels>(new Set());
-  const [mode, setMode] = useState<BuilderMode>("add");
   const [result, setResult] = useState<
     | { kind: "idle" }
     | { kind: "ok"; usedCubes: number; minimal: boolean }
@@ -65,26 +63,14 @@ export default function SoloGame({ levelName, hint, minCubes, targetViews }: Pro
 
   return (
     <div className="mt-4 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div>
-          <h1 className="text-2xl font-bold">{levelName}</h1>
+          <h1 className="text-xl sm:text-2xl font-bold">{levelName}</h1>
           <p className="text-slate-600 text-sm mt-1">{hint}</p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <ModeButton
-            active={mode === "add"}
-            onClick={() => setMode("add")}
-            label="新增"
-            color="blue"
-          />
-          <ModeButton
-            active={mode === "remove"}
-            onClick={() => setMode("remove")}
-            label="移除"
-            color="rose"
-          />
-          <div className="ml-4 text-sm text-slate-600">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="text-sm text-slate-600">
             已用方塊：<span className="font-semibold">{cubeCount}</span>
             {minCubes != null && (
               <span className="text-slate-400"> / 目標 {minCubes}</span>
@@ -98,15 +84,13 @@ export default function SoloGame({ levelName, hint, minCubes, targetViews }: Pro
           </button>
         </div>
 
-        <div className="h-[480px] rounded-xl border-2 border-slate-200 bg-white overflow-hidden">
-          <CubeBuilder voxels={voxels} onChange={onChange} mode={mode} />
+        <div className="h-[55vh] min-h-[360px] max-h-[560px] lg:h-[520px] rounded-xl border-2 border-slate-200 bg-white overflow-hidden">
+          <CubeBuilder voxels={voxels} onChange={onChange} />
         </div>
 
-        <div className="text-xs text-slate-500">
-          滑鼠拖曳：旋轉視角 · 滾輪：縮放 ·{" "}
-          {mode === "add"
-            ? "點地面或既有方塊：放置新方塊"
-            : "點方塊：移除方塊"}
+        <div className="text-xs text-slate-500 leading-relaxed">
+          👆 <b>點透明格</b>放新方塊 · <b>點實心方塊</b>移除它 ·
+          拖曳場景旋轉視角 · 兩指縮放（觸控）／滾輪縮放（桌面）
         </div>
       </div>
 
@@ -118,7 +102,7 @@ export default function SoloGame({ levelName, hint, minCubes, targetViews }: Pro
           </p>
         </div>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap gap-3 lg:flex-col">
           {(["front", "top", "side"] as const).map((name) => {
             const bad =
               result.kind === "bad" && result.mismatches.includes(name);
@@ -166,7 +150,7 @@ export default function SoloGame({ levelName, hint, minCubes, targetViews }: Pro
                   key={m}
                   className="inline-block ml-1 px-1.5 py-0.5 bg-rose-100 rounded text-xs"
                 >
-                  {m === "front" ? "正視圖" : m === "top" ? "俯視圖" : "側視圖"}
+                  {m === "front" ? "前視圖" : m === "top" ? "上視圖" : "右視圖"}
                 </span>
               ))}
             </div>
@@ -177,7 +161,7 @@ export default function SoloGame({ levelName, hint, minCubes, targetViews }: Pro
           <summary className="text-sm font-medium cursor-pointer">
             你目前的三視圖（即時預覽）
           </summary>
-          <div className="mt-3 flex flex-col gap-3">
+          <div className="mt-3 flex flex-wrap gap-3 lg:flex-col">
             {(["front", "top", "side"] as const).map((name) => (
               <ViewGrid
                 key={name}
@@ -190,32 +174,5 @@ export default function SoloGame({ levelName, hint, minCubes, targetViews }: Pro
         </details>
       </aside>
     </div>
-  );
-}
-
-function ModeButton({
-  active,
-  onClick,
-  label,
-  color,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  color: "blue" | "rose";
-}) {
-  const activeCls =
-    color === "blue"
-      ? "bg-blue-600 text-white border-blue-600"
-      : "bg-rose-600 text-white border-rose-600";
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-md border-2 px-4 py-1.5 text-sm font-medium ${
-        active ? activeCls : "bg-white text-slate-700 border-slate-300"
-      }`}
-    >
-      {label}
-    </button>
   );
 }

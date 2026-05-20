@@ -8,7 +8,7 @@ export default function Home() {
           三視圖大挑戰
         </h1>
         <p className="mt-4 text-lg text-slate-600">
-          看正視圖、俯視圖、側視圖，把立方體拼回來。
+          看前視圖、上視圖、右視圖，把立方體拼回來。
           <br />
           訓練空間想像力，挑戰自己也挑戰朋友。
         </p>

@@ -62,7 +62,7 @@ export const LEVELS: Level[] = [
   {
     id: "L5",
     name: "第 5 關 · 不可見的方塊",
-    hint: "提示：俯視圖和側視圖會「藏」掉一些方塊。",
+    hint: "提示：上視圖和右視圖會「藏」掉一些方塊。",
     minCubes: 4,
     targetVoxels: [
       [0, 0, 0],
@@ -74,7 +74,7 @@ export const LEVELS: Level[] = [
   {
     id: "L6",
     name: "第 6 關 · T 型",
-    hint: "從俯視圖看像 T 字。",
+    hint: "從上視圖看像 T 字。",
     minCubes: 5,
     targetVoxels: [
       [0, 0, 1],

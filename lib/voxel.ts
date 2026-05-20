@@ -106,7 +106,7 @@ export function voxelsFromArray(arr: [number, number, number][]): Voxels {
 }
 
 export const VIEW_LABEL: Record<ViewName, string> = {
-  front: "正視圖",
-  top: "俯視圖",
-  side: "側視圖（右）",
+  front: "前視圖",
+  top: "上視圖",
+  side: "右視圖",
 };
