@@ -89,8 +89,15 @@ class RedisStore implements Store {
 }
 
 function buildStore(): Store {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  // 同時接受 Upstash 原生命名與 Vercel KV/Marketplace 的命名
+  const url =
+    process.env.UPSTASH_REDIS_REST_URL ||
+    process.env.KV_REST_API_URL ||
+    process.env.STORAGE_REDIS_URL;
+  const token =
+    process.env.UPSTASH_REDIS_REST_TOKEN ||
+    process.env.KV_REST_API_TOKEN ||
+    process.env.STORAGE_REDIS_TOKEN;
   if (url && token) {
     return new RedisStore(new Redis({ url, token }));
   }
