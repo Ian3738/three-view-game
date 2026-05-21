@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import ViewGrid from "@/components/ViewGrid";
 import ShadowCard from "@/components/ShadowCard";
 import {
   projectAll,
@@ -21,8 +22,9 @@ const CubeBuilder = dynamic(() => import("@/components/CubeBuilder"), {
   ),
 });
 
-type Tier = "easy" | "medium" | "hard";
+export type ViewStyle = "flat" | "shadow";
 
+type Tier = "easy" | "medium" | "hard";
 const TIER_LABEL: Record<Tier, string> = {
   easy: "簡單",
   medium: "中等",
@@ -30,10 +32,9 @@ const TIER_LABEL: Record<Tier, string> = {
 };
 
 function difficultyFromTier(tier: Tier): number {
-  // 各 tier 取一個隨機難度，給變化
-  if (tier === "easy") return 1 + Math.floor(Math.random() * 3); // 1-3
-  if (tier === "medium") return 4 + Math.floor(Math.random() * 3); // 4-6
-  return 7 + Math.floor(Math.random() * 4); // 7-10
+  if (tier === "easy") return 1 + Math.floor(Math.random() * 3);
+  if (tier === "medium") return 4 + Math.floor(Math.random() * 3);
+  return 7 + Math.floor(Math.random() * 4);
 }
 
 type Puzzle = {
@@ -42,7 +43,11 @@ type Puzzle = {
   difficulty: number;
 };
 
-export default function ShadowSoloGame() {
+type Props = {
+  viewStyle: ViewStyle;
+};
+
+export default function PracticeGame({ viewStyle }: Props) {
   const [tier, setTier] = useState<Tier>("easy");
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
   const [voxels, setVoxels] = useState<Voxels>(new Set());
@@ -54,7 +59,6 @@ export default function ShadowSoloGame() {
   const [solvedCount, setSolvedCount] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
 
-  // 第一次 mount 產一題
   useEffect(() => {
     nextPuzzle("easy");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,6 +98,8 @@ export default function ShadowSoloGame() {
   if (!puzzle) {
     return <div className="mt-6 text-slate-400">產生題目中…</div>;
   }
+
+  const badMismatches = result.kind === "bad" ? result.mismatches : [];
 
   return (
     <div className="mt-4 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
@@ -143,22 +149,43 @@ export default function ShadowSoloGame() {
           <CubeBuilder voxels={voxels} onChange={onChange} />
         </div>
         <div className="text-xs text-slate-500">
-          👆 點透明格放方塊，點實心方塊移除。
+          👆 點透明格放方塊，點實心方塊移除（會連同上方一起拿掉）。
         </div>
       </div>
 
       <aside className="space-y-4">
         <div>
-          <h2 className="font-semibold text-slate-900">這題的三視圖</h2>
-          <p className="text-xs text-slate-500 mt-1">
-            拼出能在後牆、地板、左牆投出這些黑影的立體。可拖曳旋轉。
-          </p>
+          <h2 className="font-semibold text-slate-900">目標三視圖</h2>
+          {viewStyle === "flat" ? (
+            <p className="text-xs text-slate-500 mt-1">
+              黑色 = 該格至少有一個方塊。請拼出符合三張視圖的立體。
+            </p>
+          ) : (
+            <p className="text-xs text-slate-500 mt-1">
+              三個面（後牆、地板、左牆）上的黑色格 = 投影後的陰影位置。
+              拼出能投出這些影子的立體即可。可拖曳旋轉觀察。
+            </p>
+          )}
         </div>
-        <ShadowCard
-          views={puzzle.views}
-          highlightBad={result.kind === "bad" ? result.mismatches : []}
-          heightPx={300}
-        />
+
+        {viewStyle === "flat" ? (
+          <div className="flex flex-wrap gap-3 lg:flex-col">
+            {(["front", "top", "side"] as const).map((name) => (
+              <ViewGrid
+                key={name}
+                name={name}
+                mask={puzzle.views[name]}
+                highlight={badMismatches.includes(name) ? "bad" : "neutral"}
+              />
+            ))}
+          </div>
+        ) : (
+          <ShadowCard
+            views={puzzle.views}
+            highlightBad={badMismatches}
+            heightPx={300}
+          />
+        )}
 
         {result.kind !== "ok" && !showAnswer && (
           <div className="space-y-2">
@@ -196,7 +223,7 @@ export default function ShadowSoloGame() {
                   m === "front" ? "前視圖" : m === "top" ? "上視圖" : "右視圖"
                 )
                 .join("、")}{" "}
-              不對，紅色標示的視圖跟你的不一樣。
+              不對。
             </div>
           </div>
         )}

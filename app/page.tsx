@@ -18,7 +18,7 @@ export default function Home() {
             href="/solo"
             emoji="🧱"
             title="單人闖關"
-            desc="12 個手工設計的關卡，從入門到隱身高塔，循序漸進。"
+            desc="隨機出題、三檔難度，三視圖以教科書平面格式呈現。"
             color="blue"
             cta="開始"
           />
@@ -26,7 +26,7 @@ export default function Home() {
             href="/shadow-solo"
             emoji="🎲"
             title="影子陣・單人練習"
-            desc="系統隨機出題。選簡單／中等／困難，無限練。"
+            desc="隨機出題、三檔難度，三視圖用影子陣桌遊風格的角落投影呈現。"
             color="emerald"
             cta="開始練習"
           />

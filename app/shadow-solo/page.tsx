@@ -1,5 +1,5 @@
 import Link from "next/link";
-import ShadowSoloGame from "./ShadowSoloGame";
+import PracticeGame from "@/components/PracticeGame";
 
 export default function ShadowSoloPage() {
   return (
@@ -10,9 +10,10 @@ export default function ShadowSoloPage() {
         </Link>
         <h1 className="mt-4 text-2xl font-bold">影子陣 · 單人練習</h1>
         <p className="text-slate-600 text-sm mt-1">
-          系統隨機出題，看三視圖把立體拼回來。可以選難度，沒有時間壓力，純練習。
+          系統隨機出題，三視圖以「投影到三面牆」的影子陣桌遊風格呈現。
+          選簡單／中等／困難，無限練。
         </p>
-        <ShadowSoloGame />
+        <PracticeGame viewStyle="shadow" />
       </div>
     </main>
   );
