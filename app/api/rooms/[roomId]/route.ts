@@ -2,6 +2,7 @@ import {
   getRoom,
   joinRoom,
   publicView,
+  restartBattle,
   slotOf,
   submitAnswer,
   submitSecret,
@@ -50,6 +51,12 @@ export async function POST(req: Request, ctx: Ctx) {
     if (!Array.isArray(voxels))
       return Response.json({ error: "缺少 voxels" }, { status: 400 });
     const r = await submitAnswer(roomId, playerId, voxels);
+    if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
+    return Response.json(publicView(r.room, slotOf(r.room, playerId)));
+  }
+
+  if (action === "restart") {
+    const r = await restartBattle(roomId, playerId);
     if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
     return Response.json(publicView(r.room, slotOf(r.room, playerId)));
   }

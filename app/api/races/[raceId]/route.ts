@@ -4,6 +4,7 @@ import {
   joinRace,
   publicRaceView,
   raceSlotOf,
+  restartRace,
   submitRaceAnswer,
 } from "@/lib/raceRooms";
 
@@ -50,6 +51,12 @@ export async function POST(req: Request, ctx: Ctx) {
 
   if (action === "forfeit") {
     const r = await forfeitRound(raceId, playerId);
+    if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
+    return Response.json(publicRaceView(r.room, raceSlotOf(r.room, playerId)));
+  }
+
+  if (action === "restart") {
+    const r = await restartRace(raceId, playerId);
     if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
     return Response.json(publicRaceView(r.room, raceSlotOf(r.room, playerId)));
   }

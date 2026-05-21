@@ -152,6 +152,26 @@ function BattleRoom({
     [voxels, roomId]
   );
 
+  const restart = useCallback(async () => {
+    setError(null);
+    try {
+      const r = await fetch(`/api/rooms/${roomId}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          playerId: playerIdRef.current,
+          action: "restart",
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "重啟失敗");
+      setRoom(data);
+      setVoxels(new Set());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [roomId]);
+
   if (!room) {
     return (
       <div className="mt-8">
@@ -222,7 +242,7 @@ function BattleRoom({
             <WaitingForOther label="載入對手題目中…" />
           ))}
 
-        {room.phase === "done" && <DoneView room={room} />}
+        {room.phase === "done" && <DoneView room={room} onRestart={restart} />}
       </div>
     </div>
   );
@@ -430,7 +450,13 @@ function SolverView({
   );
 }
 
-function DoneView({ room }: { room: RoomData }) {
+function DoneView({
+  room,
+  onRestart,
+}: {
+  room: RoomData;
+  onRestart: () => void;
+}) {
   const score = useMemo(() => {
     let a = 0;
     let b = 0;
@@ -480,8 +506,16 @@ function DoneView({ room }: { room: RoomData }) {
         />
       </div>
 
-      <div className="text-sm text-slate-500">
-        想再來一場？回大廳建新房間即可。
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={onRestart}
+          className="rounded-lg bg-rose-600 px-5 py-2.5 text-white font-semibold hover:bg-rose-700"
+        >
+          🔄 再戰一局（同房間）
+        </button>
+        <span className="text-sm text-slate-500">
+          按下後對手畫面也會自動重置開始新一局。
+        </span>
       </div>
     </div>
   );

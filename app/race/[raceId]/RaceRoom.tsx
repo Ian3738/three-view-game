@@ -156,6 +156,26 @@ function RaceRoom({
     }
   }, [voxels, raceId, room?.currentRound]);
 
+  const restart = useCallback(async () => {
+    setError(null);
+    try {
+      const r = await fetch(`/api/races/${raceId}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          playerId: playerIdRef.current,
+          action: "restart",
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "重啟失敗");
+      setRoom(data);
+      setVoxels(new Set());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [raceId]);
+
   const forfeit = useCallback(async () => {
     if (!confirm("確定放棄這題？對手還有機會搶分。")) return;
     setError(null);
@@ -213,7 +233,7 @@ function RaceRoom({
             wrongHint={wrongHint}
           />
         )}
-        {room.phase === "done" && <DoneView room={room} />}
+        {room.phase === "done" && <DoneView room={room} onRestart={restart} />}
       </div>
     </div>
   );
@@ -359,7 +379,13 @@ function PlayView({
   );
 }
 
-function DoneView({ room }: { room: RaceData }) {
+function DoneView({
+  room,
+  onRestart,
+}: {
+  room: RaceData;
+  onRestart: () => void;
+}) {
   const aWins = room.scores.A;
   const bWins = room.scores.B;
   const winnerLabel =
@@ -417,8 +443,16 @@ function DoneView({ room }: { room: RaceData }) {
           })}
         </div>
       </div>
-      <div className="text-sm text-slate-500">
-        想再來一場？回大廳建新房間即可。
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={onRestart}
+          className="rounded-lg bg-amber-600 px-5 py-2.5 text-white font-semibold hover:bg-amber-700"
+        >
+          🔄 再戰一局（同房間）
+        </button>
+        <span className="text-sm text-slate-500">
+          按下後對手畫面也會自動重置、重抽 10 題。
+        </span>
       </div>
     </div>
   );

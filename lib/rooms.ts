@@ -248,6 +248,26 @@ export async function submitAnswer(
 }
 
 // 對外回傳：根據觀看者身分過濾敏感資料（不讓 A 在 setting/solving 階段看到 B 的秘密）
+// 重啟一局：保留雙方玩家身分，清掉所有題目/答案/結果，回到 setting 階段。
+// 任一玩家在 done 階段都可觸發。
+export async function restartBattle(
+  roomId: string,
+  playerId: string
+): Promise<{ ok: true; room: Room } | { ok: false; error: string }> {
+  const room = await getRoom(roomId);
+  if (!room) return { ok: false, error: "房間不存在" };
+  const slot = slotOf(room, playerId);
+  if (!slot) return { ok: false, error: "你不在這個房間裡" };
+  if (room.phase !== "done")
+    return { ok: false, error: "目前不是結束階段，無法重啟" };
+  room.phase = "setting";
+  room.secrets = { A: null, B: null };
+  room.answers = { A: null, B: null };
+  room.results = { A: null, B: null };
+  await store.save(room);
+  return { ok: true, room };
+}
+
 export function publicView(
   room: Room,
   viewerSlot: Slot | null

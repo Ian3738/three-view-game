@@ -276,6 +276,27 @@ export async function forfeitRound(
   return { ok: true, room };
 }
 
+// 重啟一場：保留雙方玩家身分，清掉所有題目/比分/紀錄，重抽第一題。
+// 任一玩家在 done 階段都可觸發。
+export async function restartRace(
+  raceId: string,
+  playerId: string
+): Promise<{ ok: true; room: RaceRoom } | { ok: false; error: string }> {
+  const room = await getRace(raceId);
+  if (!room) return { ok: false, error: "房間不存在" };
+  const slot = raceSlotOf(room, playerId);
+  if (!slot) return { ok: false, error: "你不在這個房間裡" };
+  if (room.phase !== "done")
+    return { ok: false, error: "目前不是結束階段，無法重啟" };
+  room.phase = "playing";
+  room.rounds = [buildRound(0)];
+  room.currentRoundIndex = 0;
+  room.scores = { A: 0, B: 0 };
+  room.recorded = false;
+  await store.save(room);
+  return { ok: true, room };
+}
+
 // 對外 view：隱藏未來的 targetVoxels，但回傳當前題目的 views。
 // 結束後可以揭露所有 targetVoxels 供回顧。
 export function publicRaceView(
